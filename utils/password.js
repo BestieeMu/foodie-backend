@@ -6,10 +6,7 @@ async function hashPassword(plain) {
 }
 
 async function comparePassword(plain, hashed) {
-  const isBcryptHash = typeof hashed === 'string' && /^\$2[aby]\$/.test(hashed);
-  if (!isBcryptHash) {
-    return plain === hashed;
-  }
+  if (!hashed) return false;
   return bcrypt.compare(plain, hashed);
 }
 

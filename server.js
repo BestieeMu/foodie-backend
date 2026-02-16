@@ -18,8 +18,16 @@ const groupRouter = require('./routes/group');
 const adminRouter = require('./routes/admin');
 const financeRouter = require('./routes/finance');
 const uploadRouter = require('./routes/upload');
+const systemRouter = require('./routes/system');
+const paymentRouter = require('./routes/payment');
+
+const { generalLimiter, authLimiter, uploadLimiter } = require('./middlewares/rateLimiter');
 
 const app = express();
+
+// Webhooks
+const walletController = require('./controllers/walletController');
+app.post('/api/wallet/webhook', express.raw({ type: 'application/json' }), walletController.paystackWebhook);
 
 // Middlewares
 app.use(express.json());
@@ -38,8 +46,9 @@ app.use(cors({
   credentials: true,
 }));
 
-const limiter = rateLimit({ windowMs: 60 * 1000, max: 120 });
-app.use(limiter);
+app.use(generalLimiter);
+
+const { verifyAccessToken } = require('./utils/auth');
 
 // Socket.IO setup
 const http = require('http');
@@ -54,10 +63,57 @@ const io = new Server(httpServer, {
 });
 app.locals.io = io;
 
+// Socket.IO Authentication Middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return next(new Error('Authentication error: No token provided'));
+  }
+  try {
+    const decoded = verifyAccessToken(token);
+    socket.user = decoded;
+    next();
+  } catch (err) {
+    next(new Error('Authentication error: Invalid token'));
+  }
+});
+
 io.on('connection', (socket) => {
   const id = socket.id;
-  console.log('Socket connected:', id);
-  socket.on('disconnect', () => console.log('Socket disconnected:', id));
+  const userId = socket.user.id;
+  console.log(`Socket connected: ${id} (User: ${userId})`);
+
+  // Join user-specific room for personal notifications
+  socket.join(`user_${userId}`);
+
+  // If user is restaurant staff/admin, join restaurant room
+  if (socket.user.restaurant_id) {
+    socket.join(`restaurant_${socket.user.restaurant_id}`);
+    console.log(`User ${userId} joined restaurant_${socket.user.restaurant_id}`);
+  }
+
+  // Event to join order tracking room
+  socket.on('join_order', (orderId) => {
+    // Ideally check if user is allowed to view this order
+    socket.join(`order_${orderId}`);
+    console.log(`User ${userId} joined order_${orderId}`);
+  });
+
+  socket.on('leave_order', (orderId) => {
+    socket.leave(`order_${orderId}`);
+  });
+
+  // Event to join group order room
+  socket.on('join_group', (groupId) => {
+    socket.join(`group_${groupId}`);
+    console.log(`User ${userId} joined group_${groupId}`);
+  });
+
+  socket.on('leave_group', (groupId) => {
+    socket.leave(`group_${groupId}`);
+  });
+
+  socket.on('disconnect', () => console.log(`Socket disconnected: ${id}`));
 });
 
 // Health check
@@ -66,7 +122,7 @@ app.get('/health', (req, res) => {
 });
 
 // Grouped routers under /api
-app.use('/api/auth', authRouter);
+app.use('/api/auth', authLimiter, authRouter);
 app.use('/api', menuRouter);
 app.use('/api', ordersRouter);
 app.use('/api', deliveryRouter);
@@ -76,6 +132,10 @@ app.use('/api', groupRouter);
 app.use('/api', adminRouter);
 app.use('/api', financeRouter);
 app.use('/api', uploadRouter);
+app.use('/api', systemRouter);
+const walletRouter = require('./routes/wallet');
+app.use('/api', paymentRouter);
+app.use('/api', walletRouter);
 
 // 404 handler
 app.use((req, res, next) => {

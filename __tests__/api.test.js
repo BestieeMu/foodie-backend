@@ -8,6 +8,8 @@ const rateLimit = require('express-rate-limit');
 
 const authRouter = require('../routes/auth');
 const menuRouter = require('../routes/menu');
+const systemRouter = require('../routes/system');
+const paymentRouter = require('../routes/payment');
 
 function createTestApp() {
   const app = express();
@@ -16,10 +18,12 @@ function createTestApp() {
   app.use(compression());
   app.use(morgan('dev'));
   app.use(cors({ origin: 'http://localhost:8082', credentials: true }));
-  const limiter = rateLimit({ windowMs: 60 * 1000, max: 120 });
-  app.use(limiter);
+  const { generalLimiter } = require('../middlewares/rateLimiter');
+  app.use(generalLimiter);
   app.use('/api/auth', authRouter);
   app.use('/api', menuRouter);
+  app.use('/api', systemRouter);
+  app.use('/api', paymentRouter);
   return app;
 }
 
@@ -41,5 +45,12 @@ describe('Foodie API', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(0);
+  });
+
+  it('gets system settings', async () => {
+    const res = await request(app).get('/api/settings');
+    expect(res.status).toBe(200);
+    expect(res.body.tax_rate).toBeDefined();
+    expect(res.body.currency).toBeDefined();
   });
 });

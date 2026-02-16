@@ -56,11 +56,18 @@ Base path: `/api`
 - `GET /addresses/:userId` — list user addresses (self or admin)
 - `POST /addresses` — create address (self or admin)
 
+### System
+- `GET /settings` — get system settings (tax, commission, etc.)
+
+### Payment
+- `POST /payment/initialize` — initialize Paystack payment
+- `GET /payment/verify/:reference` — verify Paystack payment
+
 ## Scripts
 - `npm run dev` — start in dev with nodemon
 - `npm start` — start production server
 - `npm test` — run Jest tests
 
 ## Notes
-- Data store is in-memory for demo; replace with a DB in production.
-- Ensure `JWT_SECRET` and `JWT_REFRESH_SECRET` are set in production.
+- Database: Supabase (PostgreSQL)
+- Ensure all environment variables in `.env.example` are set in production.

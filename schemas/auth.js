@@ -17,10 +17,17 @@ const signupSchema = z.object({
   }),
 });
 
+const verifyOtpSchema = z.object({
+  body: z.object({
+    email: z.string().email(),
+    otp: z.string().length(6),
+  }),
+});
+
 const refreshSchema = z.object({
   body: z.object({
     refreshToken: z.string().min(1),
   }),
 });
 
-module.exports = { loginSchema, signupSchema, refreshSchema };
+module.exports = { loginSchema, signupSchema, verifyOtpSchema, refreshSchema };

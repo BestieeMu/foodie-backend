@@ -41,7 +41,28 @@ function calcOrderTotal(items) {
   return Number(total.toFixed(2));
 }
 
+/**
+ * Calculate full order costs including tax and delivery
+ * @param {Array} items - Order items
+ * @param {Number} taxRate - Tax rate in percentage (e.g. 5 for 5%)
+ * @param {Number} deliveryFee - Delivery fee amount
+ * @returns {Object} { subtotal, tax, deliveryFee, total }
+ */
+function calculateOrderCosts(items, taxRate = 0, deliveryFee = 0) {
+  const subtotal = calcOrderTotal(items);
+  const tax = Number((subtotal * (taxRate / 100)).toFixed(2));
+  const total = Number((subtotal + tax + Number(deliveryFee)).toFixed(2));
+  
+  return {
+    subtotal,
+    tax,
+    deliveryFee: Number(deliveryFee),
+    total
+  };
+}
+
 module.exports = {
   calcItemPrice,
-  calcOrderTotal
+  calcOrderTotal,
+  calculateOrderCosts
 };

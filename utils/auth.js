@@ -4,7 +4,7 @@ const ACCESS_EXPIRES_IN = '15m';
 const REFRESH_EXPIRES_IN = '7d';
 
 function signAccessToken(user) {
-  const payload = { id: user.id, email: user.email, role: user.role };
+  const payload = { id: user.id, email: user.email, role: user.role, restaurant_id: user.restaurant_id };
   const secret = process.env.JWT_SECRET || 'dev-secret';
   return jwt.sign(payload, secret, { expiresIn: ACCESS_EXPIRES_IN });
 }
@@ -38,10 +38,18 @@ function authMiddleware(req, res, next) {
   }
 }
 
-function requireRole(role) {
+/**
+ * Middleware to check if user has one of the required roles.
+ * @param {string|string[]} roles - Single role or array of roles.
+ */
+function requireRole(roles) {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
-    if (req.user.role !== role) return res.status(403).json({ message: 'Forbidden' });
+    
+    const requiredRoles = Array.isArray(roles) ? roles : [roles];
+    if (!requiredRoles.includes(req.user.role)) {
+        return res.status(403).json({ message: 'Forbidden' });
+    }
     next();
   };
 }

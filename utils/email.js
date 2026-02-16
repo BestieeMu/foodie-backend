@@ -53,6 +53,39 @@ async function sendRestaurantWelcomeEmail(email, name, password) {
   }
 }
 
+/**
+ * Send OTP for verification
+ */
+async function sendOtpEmail(email, otp) {
+  try {
+    if (!process.env.SMTP_HOST) {
+      console.log('--- OTP MOCK (SMTP NOT CONFIGURED) ---');
+      console.log(`To: ${email}`);
+      console.log(`OTP: ${otp}`);
+      console.log('--------------------------------------');
+      return;
+    }
+
+    await transporter.sendMail({
+      from: `"Foodie Platform" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: "Verify Your Account - Foodie",
+      text: `Your verification code is: ${otp}. It expires in 10 minutes.`,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px;">
+          <h2>Verify Your Account</h2>
+          <p>Your verification code is:</p>
+          <h1 style="letter-spacing: 5px; background: #eee; padding: 10px; display: inline-block;">${otp}</h1>
+          <p>This code expires in 10 minutes.</p>
+        </div>
+      `,
+    });
+  } catch (error) {
+    console.error('Failed to send OTP:', error);
+  }
+}
+
 module.exports = {
   sendRestaurantWelcomeEmail,
+  sendOtpEmail
 };
