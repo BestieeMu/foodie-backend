@@ -150,6 +150,15 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4003;
-httpServer.listen(PORT, () => {
-  console.log(`Backend listening on http://localhost:${PORT}`);
-});
+
+// When running locally (e.g. `npm start`), start the HTTP server.
+// In serverless environments like Netlify Functions, this file is required
+// as a module and the Express app is wrapped by `serverless-http` instead.
+if (require.main === module) {
+  httpServer.listen(PORT, () => {
+    console.log(`Backend listening on http://localhost:${PORT}`);
+  });
+}
+
+// Export the app (and server) so it can be used by Netlify Functions and tests.
+module.exports = { app, httpServer };
