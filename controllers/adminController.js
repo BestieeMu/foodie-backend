@@ -28,15 +28,12 @@ const getRestaurantStats = async (req, res) => {
     const rest = await getAdminRestaurant(req.user.id);
     if (!rest) return res.status(404).json({ message: 'Restaurant not found for this admin' });
 
+    const rangeParam = parseInt(req.query.range) || 7;
     const today = new Date().toISOString().split('T')[0];
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - rangeParam);
+    const pastDateStr = pastDate.toISOString().split('T')[0];
 
-    // Fetch orders for the last 7 days only for efficiency
-    // For total revenue, we might need a separate query or a summary table in a real large-scale app
-    // Here we'll fetch all for simplicity but in a real "top-notch" app we'd use aggregate functions (sum) via RPC or separate queries
-    
     // 1. Get Today's Revenue & Count
     const { data: todayOrders, error: todayError } = await supabase
         .from('orders')
@@ -49,28 +46,28 @@ const getRestaurantStats = async (req, res) => {
     const todayRevenue = todayOrders.reduce((sum, o) => sum + (o.total || 0), 0);
     const activeOrders = todayOrders.filter(o => ['pending', 'preparing', 'ready_for_pickup', 'on_the_way'].includes(o.status)).length;
 
-    // 2. Get Last 7 Days for Graph
-    const { data: weekOrders, error: weekError } = await supabase
+    // 2. Get Range Days for Graph
+    const { data: rangeOrders, error: rangeError } = await supabase
         .from('orders')
         .select('total, created_at, items')
         .eq('restaurant_id', rest.id)
-        .gte('created_at', sevenDaysAgoStr + 'T00:00:00');
+        .gte('created_at', pastDateStr + 'T00:00:00');
 
-    if (weekError) throw weekError;
+    if (rangeError) throw rangeError;
 
     const salesHistory = [];
-    for (let i = 6; i >= 0; i--) {
+    for (let i = rangeParam - 1; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const dateStr = d.toISOString().split('T')[0];
-        const dayOrders = weekOrders.filter(o => o.created_at && o.created_at.startsWith(dateStr));
+        const dayOrders = rangeOrders.filter(o => o.created_at && o.created_at.startsWith(dateStr));
         const revenue = dayOrders.reduce((sum, o) => sum + (o.total || 0), 0);
         salesHistory.push({ date: dateStr, revenue });
     }
 
-    // 3. Get Popular Items (from week orders to be faster, or all time if needed)
+    // 3. Get Popular Items (from range orders to be faster, or all time if needed)
     const itemCounts = {};
-    weekOrders.forEach(o => {
+    rangeOrders.forEach(o => {
       let items = o.items;
       if (typeof items === 'string') {
         try { items = JSON.parse(items); } catch (e) {}
