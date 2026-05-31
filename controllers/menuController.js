@@ -1,4 +1,5 @@
 const supabase = require('../utils/supabase');
+const crypto = require('crypto');
 
 const getRestaurants = async (req, res, next) => {
   try {
@@ -100,6 +101,7 @@ const createMenuItem = async (req, res, next) => {
     const { data: item, error } = await supabase
       .from('menu_items')
       .insert({
+        id: crypto.randomUUID(),
         restaurant_id: user.restaurant_id,
         name,
         description,
