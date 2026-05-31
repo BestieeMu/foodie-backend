@@ -233,11 +233,16 @@ const getSystemStats = async (req, res) => {
 const updateRestaurant = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, address, categories, image_url } = req.body;
+        const { name, address, categories, image_url, is_verified } = req.body;
         
+        const updatePayload = { name, address, categories, image_url };
+        if (is_verified !== undefined) {
+            updatePayload.is_verified = is_verified;
+        }
+
         const { data: updated, error } = await supabase
             .from('restaurants')
-            .update({ name, address, categories, image_url })
+            .update(updatePayload)
             .eq('id', id)
             .select()
             .single();

@@ -50,6 +50,9 @@ app.use(cors({
 
 app.use(generalLimiter);
 
+const maintenanceMiddleware = require('./middlewares/maintenance');
+app.use(maintenanceMiddleware);
+
 const { verifyAccessToken } = require('./utils/auth');
 
 // Socket.IO setup
