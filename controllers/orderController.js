@@ -122,7 +122,7 @@ const getOrderById = async (req, res, next) => {
     const { orderId } = req.params;
     const { data: order, error } = await supabase
         .from('orders')
-        .select('*, restaurant:restaurant_id(name, image_url, phone), driver:driver_id(name, phone, lat, lng)')
+        .select('*, restaurant:restaurant_id(name, image_url), driver:driver_id(name, phone)')
         .eq('id', orderId)
         .single();
 

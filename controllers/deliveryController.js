@@ -5,7 +5,7 @@ const getAvailableOrders = async (req, res, next) => {
     // return only delivery orders that are not assigned yet and pending/confirmed
     const { data: orders, error } = await supabase
       .from('orders')
-      .select('*, restaurant:restaurant_id(name, address, lat, lng)')
+      .select('*, restaurant:restaurant_id(name, address)')
       .eq('type', 'delivery')
       .is('driver_id', null)
       .in('status', ['pending', 'preparing', 'ready_for_pickup']) 
@@ -70,7 +70,7 @@ const getDriverOrders = async (req, res, next) => {
 
     const { data: orders, error } = await supabase
       .from('orders')
-      .select('*, restaurant:restaurant_id(name, address, lat, lng)')
+      .select('*, restaurant:restaurant_id(name, address)')
       .eq('driver_id', driverId)
       .neq('status', 'delivered')
       .order('created_at', { ascending: false });
