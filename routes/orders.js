@@ -11,6 +11,7 @@ router.post('/orders', authMiddleware, requireRole('customer'), validate(createO
 router.get('/orders/:orderId', authMiddleware, orderController.getOrderById); // Role check inside controller
 router.get('/orders/user/:userId', authMiddleware, orderController.getUserOrders); // Role check inside controller
 router.patch('/orders/:orderId/status', authMiddleware, validate(updateOrderStatusSchema), orderController.updateOrderStatus); // Role check inside controller
+router.put('/orders/:orderId/status', authMiddleware, validate(updateOrderStatusSchema), orderController.updateOrderStatus);
 
 // Reviews
 router.post('/orders/:orderId/review', authMiddleware, requireRole('customer'), reviewController.submitReview);
