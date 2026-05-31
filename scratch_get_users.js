@@ -1,13 +1,14 @@
 const supabase = require('./utils/supabase');
 async function run() {
-  const { data: users, error } = await supabase
+  const { data: user, error } = await supabase
     .from('users')
     .select('*')
-    .limit(10);
+    .eq('id', 'u_1780241981102')
+    .single();
   if (error) {
-    console.error('Error fetching users:', error);
+    console.error('Error fetching user:', error);
   } else {
-    console.log('Users:', users.map(u => ({ id: u.id, name: u.name, role: u.role, email: u.email })));
+    console.log('Bimbo Restaurant Admin user row:', user);
   }
 }
 run();

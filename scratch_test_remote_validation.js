@@ -17,7 +17,8 @@ async function test() {
 
   console.log('Generated token:', token);
 
-  const url = 'https://foodie-backend.pxxl.click/api/orders/b2425d17-c4b9-4a19-93e2-7c28d4ef2b0d/status';
+  // Let's find a pending order to test on
+  const url = 'https://foodie-backend.pxxl.click/api/orders/da38d187-787d-46ed-bfb4-be741e831453/status';
   
   try {
     const res = await fetch(url, {
