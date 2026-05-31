@@ -164,11 +164,63 @@ const deleteMenuItem = async (req, res, next) => {
   }
 };
 
+const searchAll = async (req, res, next) => {
+  try {
+    const q = req.query.q || '';
+    if (!q) {
+      return res.json({ restaurants: [], items: [] });
+    }
+
+    const searchPattern = `%${q}%`;
+
+    // 1. Search Restaurants by name or address or categories containing the word
+    const { data: restaurants, error: restError } = await supabase
+      .from('restaurants')
+      .select('*')
+      .or(`name.ilike.${searchPattern},address.ilike.${searchPattern}`);
+    
+    if (restError) throw restError;
+
+    // 2. Search Menu Items by name or description or category
+    const { data: items, error: itemsError } = await supabase
+      .from('menu_items')
+      .select('*')
+      .or(`name.ilike.${searchPattern},description.ilike.${searchPattern},category.ilike.${searchPattern}`);
+
+    if (itemsError) throw itemsError;
+
+    // Optional: Also find restaurants that have the searched category if they store it as an array
+    // Since Supabase ILIKE on array fields might be tricky, we just use the name/address for now.
+    // However, if the menu items match, we should probably fetch their restaurant details so the UI can show them properly.
+    
+    const mappedItems = items.map(i => ({
+      ...i,
+      imageUrl: i.image_url,
+      isAvailable: i.is_available
+    }));
+
+    res.json({
+      restaurants: restaurants.map(r => ({
+        id: r.id,
+        name: r.name,
+        rating: r.rating,
+        categories: r.categories,
+        imageUrl: r.image_url,
+        address: r.address,
+      })),
+      items: mappedItems
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
     getRestaurants,
     getRestaurantItems,
     getMyMenu,
     createMenuItem,
     updateMenuItem,
-    deleteMenuItem
+    deleteMenuItem,
+    searchAll
 };

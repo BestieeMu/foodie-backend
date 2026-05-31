@@ -29,9 +29,11 @@ const createAddress = async (req, res) => {
       return res.status(403).json({ message: 'Forbidden' });
     }
 
+    const crypto = require('crypto');
     const { data, error } = await supabase
       .from('addresses')
       .insert({
+        id: crypto.randomUUID(),
         user_id: userId,
         label,
         street,

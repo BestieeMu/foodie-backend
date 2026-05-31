@@ -3,6 +3,7 @@ const menuController = require('../controllers/menuController');
 
 const router = express.Router();
 
+router.get('/menu/search', menuController.searchAll);
 router.get('/menu/restaurants', menuController.getRestaurants);
 router.get('/menu/restaurants/:id/items', menuController.getRestaurantItems);
 
