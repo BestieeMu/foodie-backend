@@ -106,7 +106,96 @@ const requestPayout = async (req, res) => {
   }
 };
 
+const getPlatformFinance = async (req, res) => {
+  try {
+    const { data: settings } = await supabase.from('system_settings').select('*').single();
+    const commissionRate = (settings?.commission_rate || 10) / 100;
+
+    const { data: orders, error: orderError } = await supabase
+      .from('orders')
+      .select('subtotal, total')
+      .eq('status', 'delivered');
+      
+    if (orderError) throw orderError;
+
+    const totalGMV = orders.reduce((sum, o) => sum + (o.subtotal || o.total || 0), 0);
+    const totalRevenue = totalGMV * commissionRate;
+
+    const { count: activeRestaurants } = await supabase
+      .from('restaurants')
+      .select('*', { count: 'exact', head: true });
+
+    const { data: recentPayouts, error: payoutError } = await supabase
+      .from('payouts')
+      .select('*, restaurant:restaurant_id(name)')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    res.json({
+      totalGMV,
+      totalRevenue,
+      activeRestaurants: activeRestaurants || 0,
+      recentPayouts: (recentPayouts || []).map(p => ({
+        id: p.id,
+        restaurantId: p.restaurant_id,
+        restaurantName: p.restaurant?.name || 'Unknown',
+        amount: p.amount,
+        status: p.status,
+        requestedAt: p.created_at,
+        processedAt: p.updated_at
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const getPayouts = async (req, res) => {
+  try {
+    const { data: payouts, error } = await supabase
+      .from('payouts')
+      .select('*, restaurant:restaurant_id(name)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json((payouts || []).map(p => ({
+      id: p.id,
+      restaurantId: p.restaurant_id,
+      restaurantName: p.restaurant?.name || 'Unknown',
+      amount: p.amount,
+      status: p.status,
+      requestedAt: p.created_at,
+      processedAt: p.updated_at
+    })));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const updatePayoutStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const { data: updated, error } = await supabase
+      .from('payouts')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
     getWallet,
-    requestPayout
+    requestPayout,
+    getPlatformFinance,
+    getPayouts,
+    updatePayoutStatus
 };

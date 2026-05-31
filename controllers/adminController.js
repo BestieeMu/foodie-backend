@@ -233,11 +233,321 @@ const getSystemStats = async (req, res) => {
     }
 };
 
+const updateRestaurant = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, address, categories, image_url } = req.body;
+        
+        const { data: updated, error } = await supabase
+            .from('restaurants')
+            .update({ name, address, categories, image_url })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json(updated);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const deleteRestaurant = async (req, res) => {
+    try {
+        const { id } = req.params;
+        // First delete associated users to avoid foreign key constraint errors
+        await supabase.from('users').delete().eq('restaurant_id', id);
+        
+        const { error } = await supabase
+            .from('restaurants')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        res.json({ message: 'Restaurant deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const getAllOrders = async (req, res) => {
+    try {
+        const { data: orders, error } = await supabase
+            .from('orders')
+            .select('*, restaurant:restaurant_id(name), user:user_id(name), driver:driver_id(name)')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        res.json(orders);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const getMyRestaurant = async (req, res) => {
+    try {
+        const { data: user } = await supabase
+            .from('users')
+            .select('restaurant_id')
+            .eq('id', req.user.id)
+            .single();
+
+        if (!user || !user.restaurant_id) {
+            return res.status(404).json({ message: 'Restaurant not found for this admin' });
+        }
+
+        const { data: restaurant, error } = await supabase
+            .from('restaurants')
+            .select('*')
+            .eq('id', user.restaurant_id)
+            .single();
+
+        if (error) throw error;
+        
+        // Return matching format for frontend Settings.tsx
+        res.json({
+            id: restaurant.id,
+            name: restaurant.name,
+            address: restaurant.address,
+            imageUrl: restaurant.image_url,
+            categories: restaurant.categories
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const updateMyRestaurant = async (req, res) => {
+    try {
+        const { name, address, categories, imageUrl } = req.body;
+        
+        const { data: user } = await supabase
+            .from('users')
+            .select('restaurant_id')
+            .eq('id', req.user.id)
+            .single();
+
+        if (!user || !user.restaurant_id) {
+            return res.status(404).json({ message: 'Restaurant not found for this admin' });
+        }
+
+        const { data: updated, error } = await supabase
+            .from('restaurants')
+            .update({ name, address, categories, image_url: imageUrl })
+            .eq('id', user.restaurant_id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json(updated);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const getMyStaff = async (req, res) => {
+    try {
+        const { data: user } = await supabase
+            .from('users')
+            .select('restaurant_id')
+            .eq('id', req.user.id)
+            .single();
+
+        if (!user || !user.restaurant_id) {
+            return res.status(404).json({ message: 'Restaurant not found' });
+        }
+
+        const { data: staff, error } = await supabase
+            .from('users')
+            .select('id, name, email, role, created_at')
+            .eq('restaurant_id', user.restaurant_id)
+            .in('role', ['admin', 'driver']);
+
+        if (error) throw error;
+        res.json(staff);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const createStaff = async (req, res) => {
+    try {
+        const { name, email, password, role } = req.body;
+        
+        const { data: user } = await supabase
+            .from('users')
+            .select('restaurant_id')
+            .eq('id', req.user.id)
+            .single();
+
+        if (!user || !user.restaurant_id) {
+            return res.status(404).json({ message: 'Restaurant not found' });
+        }
+
+        // We use auth signup first if needed, or simply insert into users if using custom auth
+        // Assuming we insert directly into users table with password hash for our custom auth
+        const bcrypt = require('bcryptjs');
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const { data: newStaff, error } = await supabase
+            .from('users')
+            .insert({
+                name,
+                email,
+                password_hash: hashedPassword,
+                role,
+                restaurant_id: user.restaurant_id
+            })
+            .select('id, name, email, role')
+            .single();
+
+        if (error) throw error;
+        res.json(newStaff);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const updateStaff = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, email, role, password } = req.body;
+
+        const updateData = { name, email, role };
+        
+        if (password) {
+            const bcrypt = require('bcryptjs');
+            const salt = await bcrypt.genSalt(10);
+            updateData.password_hash = await bcrypt.hash(password, salt);
+        }
+
+        const { data: updated, error } = await supabase
+            .from('users')
+            .update(updateData)
+            .eq('id', id)
+            .select('id, name, email, role')
+            .single();
+
+        if (error) throw error;
+        res.json(updated);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const deleteStaff = async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        res.json({ message: 'Staff deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const getMyCustomers = async (req, res) => {
+    try {
+        const { data: user } = await supabase
+            .from('users')
+            .select('restaurant_id')
+            .eq('id', req.user.id)
+            .single();
+
+        if (!user || !user.restaurant_id) {
+            return res.status(404).json({ message: 'Restaurant not found' });
+        }
+
+        const { data: orders, error } = await supabase
+            .from('orders')
+            .select('user_id, total, created_at, user:user_id(name, email)')
+            .eq('restaurant_id', user.restaurant_id)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Aggregate orders by customer
+        const customerMap = {};
+        for (const o of orders) {
+            if (!o.user) continue;
+            if (!customerMap[o.user_id]) {
+                customerMap[o.user_id] = {
+                    id: o.user_id,
+                    name: o.user.name,
+                    email: o.user.email,
+                    ordersCount: 0,
+                    totalSpent: 0,
+                    lastOrderDate: o.created_at
+                };
+            }
+            customerMap[o.user_id].ordersCount += 1;
+            customerMap[o.user_id].totalSpent += (o.total || 0);
+            if (new Date(o.created_at) > new Date(customerMap[o.user_id].lastOrderDate)) {
+                customerMap[o.user_id].lastOrderDate = o.created_at;
+            }
+        }
+
+        res.json(Object.values(customerMap));
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const getMyReviews = async (req, res) => {
+    try {
+        const { data: user } = await supabase
+            .from('users')
+            .select('restaurant_id')
+            .eq('id', req.user.id)
+            .single();
+
+        if (!user || !user.restaurant_id) {
+            return res.status(404).json({ message: 'Restaurant not found' });
+        }
+
+        const { data: reviews, error } = await supabase
+            .from('reviews')
+            .select('id, rating, comment, created_at, order_id, user:user_id(name)')
+            .eq('restaurant_id', user.restaurant_id)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        res.json(reviews.map(r => ({
+            id: r.id,
+            orderId: r.order_id,
+            customerName: r.user?.name || 'Unknown Customer',
+            rating: r.rating,
+            comment: r.comment,
+            createdAt: r.created_at
+        })));
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getRestaurantStats,
     getRestaurantOrders,
     getAllRestaurants,
     createRestaurant,
+    updateRestaurant,
+    deleteRestaurant,
     getAllUsers,
-    getSystemStats
+    getSystemStats,
+    getAllOrders,
+    getMyRestaurant,
+    updateMyRestaurant,
+    getMyStaff,
+    createStaff,
+    updateStaff,
+    deleteStaff,
+    getMyCustomers,
+    getMyReviews
 };

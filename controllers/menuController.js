@@ -58,7 +58,115 @@ const getRestaurantItems = async (req, res, next) => {
   }
 };
 
+const getMyMenu = async (req, res, next) => {
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('restaurant_id')
+      .eq('id', req.user.id)
+      .single();
+
+    if (!user || !user.restaurant_id) return res.status(404).json({ message: 'Restaurant not found' });
+
+    const { data: items, error } = await supabase
+      .from('menu_items')
+      .select('*')
+      .eq('restaurant_id', user.restaurant_id);
+
+    if (error) throw error;
+
+    res.json(items.map(i => ({
+      ...i,
+      imageUrl: i.image_url,
+      isAvailable: i.is_available
+    })));
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createMenuItem = async (req, res, next) => {
+  try {
+    const { name, description, price, category, image, options } = req.body;
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('restaurant_id')
+      .eq('id', req.user.id)
+      .single();
+
+    if (!user || !user.restaurant_id) return res.status(404).json({ message: 'Restaurant not found' });
+
+    const { data: item, error } = await supabase
+      .from('menu_items')
+      .insert({
+        restaurant_id: user.restaurant_id,
+        name,
+        description,
+        price,
+        category,
+        image_url: image,
+        options,
+        is_available: true
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(item);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateMenuItem = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, description, price, category, image, options, isAvailable } = req.body;
+
+    const { data: item, error } = await supabase
+      .from('menu_items')
+      .update({
+        name,
+        description,
+        price,
+        category,
+        image_url: image,
+        options,
+        is_available: isAvailable !== undefined ? isAvailable : true
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(item);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteMenuItem = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('menu_items')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ message: 'Menu item deleted' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
     getRestaurants,
-    getRestaurantItems
+    getRestaurantItems,
+    getMyMenu,
+    createMenuItem,
+    updateMenuItem,
+    deleteMenuItem
 };
