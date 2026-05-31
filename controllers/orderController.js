@@ -270,6 +270,23 @@ const updateOrderStatus = async (req, res, next) => {
         io.to(`restaurant_${order.restaurant_id}`).emit('orders:update', { type: 'updated', order: updated });
     }
 
+    // Send Push Notification to the Customer
+    try {
+      const { sendPushNotifications } = require('../utils/notifications');
+      let title = "Order Update";
+      let body = `Your order status changed to ${status}`;
+      
+      if (status === 'accepted') body = "Your order has been accepted by the restaurant!";
+      else if (status === 'preparing') body = "The kitchen is preparing your order!";
+      else if (status === 'ready_for_pickup') body = "Your order is ready and waiting for a driver!";
+      else if (status === 'picked_up') body = "Your order has been picked up and is on the way!";
+      else if (status === 'delivered') body = "Your order has been delivered. Enjoy your meal!";
+      
+      await sendPushNotifications([order.user_id], title, body, { orderId: order.id, status });
+    } catch (pushErr) {
+      console.error('Failed to send push notification:', pushErr);
+    }
+
     res.json(updated);
   } catch (error) {
     next(error);

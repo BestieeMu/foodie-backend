@@ -22,6 +22,12 @@ const login = async (req, res, next) => {
     const match = await comparePassword(password, user.password);
     if (!match) return res.status(401).json({ message: 'Incorrect password. Please try again.' });
 
+    // Update push token if provided
+    if (req.body.pushToken && req.body.pushToken !== user.push_token) {
+      await supabase.from('users').update({ push_token: req.body.pushToken }).eq('id', user.id);
+      user.push_token = req.body.pushToken;
+    }
+
     if (role && user.role !== role) {
         // Allow super_admin to login as admin
         if (role === 'admin' && user.role === 'super_admin') {
