@@ -488,13 +488,19 @@ const getMyCustomers = async (req, res) => {
                     email: o.user.email,
                     ordersCount: 0,
                     totalSpent: 0,
+                    joinedAt: o.created_at, // First order seen (orders are desc, so this starts as newest, but we'll update it)
                     lastOrderDate: o.created_at
                 };
             }
             customerMap[o.user_id].ordersCount += 1;
             customerMap[o.user_id].totalSpent += (o.total || 0);
-            if (new Date(o.created_at) > new Date(customerMap[o.user_id].lastOrderDate)) {
+            
+            const oDate = new Date(o.created_at);
+            if (oDate > new Date(customerMap[o.user_id].lastOrderDate)) {
                 customerMap[o.user_id].lastOrderDate = o.created_at;
+            }
+            if (oDate < new Date(customerMap[o.user_id].joinedAt)) {
+                customerMap[o.user_id].joinedAt = o.created_at;
             }
         }
 
