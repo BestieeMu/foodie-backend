@@ -11,5 +11,7 @@ router.post('/delivery/accept', authMiddleware, requireRole('driver'), validate(
 router.get('/delivery/driver/:driverId', authMiddleware, requireRole(['driver', 'admin']), deliveryController.getDriverOrders);
 router.post('/delivery/location', authMiddleware, requireRole('driver'), validate(driverLocationUpdateSchema), deliveryController.updateDriverLocation); // New route for updating location
 router.get('/delivery/location/:driverId', authMiddleware, requireRole(['driver', 'admin', 'customer']), deliveryController.getDriverLocation); // Customers need this for tracking
+router.post('/delivery/pickup/:orderId', authMiddleware, requireRole('driver'), deliveryController.pickupOrder);
+router.post('/delivery/complete/:orderId', authMiddleware, requireRole('driver'), deliveryController.completeOrder);
 
 module.exports = router;

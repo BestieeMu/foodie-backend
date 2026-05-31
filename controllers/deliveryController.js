@@ -156,10 +156,30 @@ const getDriverLocation = async (req, res, next) => {
       }
 };
 
+const orderController = require('./orderController');
+
+const pickupOrder = async (req, res, next) => {
+  req.validated = {
+    body: { status: 'picked_up' },
+    params: { orderId: req.params.orderId }
+  };
+  return orderController.updateOrderStatus(req, res, next);
+};
+
+const completeOrder = async (req, res, next) => {
+  req.validated = {
+    body: { status: 'delivered' },
+    params: { orderId: req.params.orderId }
+  };
+  return orderController.updateOrderStatus(req, res, next);
+};
+
 module.exports = {
     getAvailableOrders,
     acceptOrder,
     getDriverOrders,
     updateDriverLocation,
-    getDriverLocation
+    getDriverLocation,
+    pickupOrder,
+    completeOrder
 };
