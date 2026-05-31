@@ -391,15 +391,18 @@ const createStaff = async (req, res) => {
         const bcrypt = require('bcryptjs');
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
+        const { v4: uuidv4 } = require('uuid');
 
         const { data: newStaff, error } = await supabase
             .from('users')
             .insert({
+                id: uuidv4(),
                 name,
                 email,
-                password_hash: hashedPassword,
+                password: hashedPassword,
                 role,
-                restaurant_id: user.restaurant_id
+                restaurant_id: user.restaurant_id,
+                is_verified: true
             })
             .select('id, name, email, role')
             .single();
@@ -421,7 +424,7 @@ const updateStaff = async (req, res) => {
         if (password) {
             const bcrypt = require('bcryptjs');
             const salt = await bcrypt.genSalt(10);
-            updateData.password_hash = await bcrypt.hash(password, salt);
+            updateData.password = await bcrypt.hash(password, salt);
         }
 
         const { data: updated, error } = await supabase
