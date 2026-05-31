@@ -37,12 +37,32 @@ const createOrder = async (req, res, next) => {
         const choice = it.choice || {};
         const price = calcItemPrice(menuItem, choice);
         
+        const options = menuItem.options || {};
+        const choiceNames = [];
+        if (choice.sizeId && Array.isArray(options.sizes)) {
+            const found = options.sizes.find((s) => s.id === choice.sizeId);
+            if (found) choiceNames.push(found.name);
+        }
+        if (Array.isArray(choice.addOnIds) && Array.isArray(options.addOns)) {
+            choice.addOnIds.forEach(id => {
+                const add = options.addOns.find((a) => a.id === id);
+                if (add) choiceNames.push(add.name);
+            });
+        }
+        if (Array.isArray(choice.extraIds) && Array.isArray(options.extras)) {
+            choice.extraIds.forEach(id => {
+                const ex = options.extras.find((a) => a.id === id);
+                if (ex) choiceNames.push(ex.name);
+            });
+        }
+        
         orderItems.push({ 
             itemId: menuItem.id, 
             name: menuItem.name, 
             quantity, 
             price, 
-            choice 
+            choice,
+            choiceNames
         });
     }
 
@@ -177,7 +197,7 @@ const updateOrderStatus = async (req, res, next) => {
 
     // Logic to ensure correct transitions
     const validTransitions = {
-      'pending': ['accepted', 'rejected', 'cancelled'],
+      'pending': ['accepted', 'preparing', 'rejected', 'cancelled'],
       'scheduled': ['pending', 'cancelled'],
       'accepted': ['preparing', 'ready_for_pickup', 'cancelled'], // 'cancelled' by admin/system
       'preparing': ['ready_for_pickup', 'cancelled'],
