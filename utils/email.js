@@ -1,26 +1,20 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+// The sender email should be configured, default to a Resend test domain or the user's verified domain.
+const fromEmail = process.env.RESEND_FROM_EMAIL || 'Foodie Platform <onboarding@resend.dev>';
 
 /**
  * Send welcome email to a new restaurant admin
  */
 async function sendRestaurantWelcomeEmail(email, name, password) {
   try {
-    // If SMTP is not configured, throw in production, log in dev
-    if (!process.env.SMTP_HOST) {
+    if (!resend) {
       if (process.env.NODE_ENV === 'production') {
-        throw new Error('SMTP configuration missing in production');
+        throw new Error('Resend configuration missing in production');
       }
-      console.warn('--- EMAIL SKIPPED - SMTP NOT CONFIGURED ---');
+      console.warn('--- EMAIL SKIPPED - RESEND NOT CONFIGURED ---');
       console.log(`To: ${email}`);
       console.log(`Subject: Welcome to Foodie Platform`);
       console.log(`Body: Hello ${name}, your restaurant account has been created. Use password: ${password}`);
@@ -28,8 +22,8 @@ async function sendRestaurantWelcomeEmail(email, name, password) {
       return;
     }
 
-    const info = await transporter.sendMail({
-      from: `"Foodie Platform" <${process.env.SMTP_USER}>`,
+    const data = await resend.emails.send({
+      from: fromEmail,
       to: email,
       subject: "Welcome to Foodie Platform - Your Restaurant Account",
       text: `Hello ${name},\n\nYour restaurant account has been created successfully.\n\nYou can log in to the Admin Dashboard using these credentials:\n\nEmail: ${email}\nPassword: ${password}\n\nPlease change your password after your first login.\n\nBest regards,\nFoodie Team`,
@@ -50,7 +44,11 @@ async function sendRestaurantWelcomeEmail(email, name, password) {
       `,
     });
 
-    console.log("Email sent: %s", info.messageId);
+    if (data.error) {
+      console.error('Resend API Error:', data.error);
+    } else {
+      console.log("Email sent successfully. ID:", data.data?.id);
+    }
   } catch (error) {
     console.error('Failed to send email:', error);
   }
@@ -61,19 +59,19 @@ async function sendRestaurantWelcomeEmail(email, name, password) {
  */
 async function sendOtpEmail(email, otp) {
   try {
-    if (!process.env.SMTP_HOST) {
+    if (!resend) {
       if (process.env.NODE_ENV === 'production') {
-        throw new Error('SMTP configuration missing in production');
+        throw new Error('Resend configuration missing in production');
       }
-      console.warn('--- OTP EMAIL SKIPPED - SMTP NOT CONFIGURED ---');
+      console.warn('--- OTP EMAIL SKIPPED - RESEND NOT CONFIGURED ---');
       console.log(`To: ${email}`);
       console.log(`OTP: ${otp}`);
       console.log('--------------------------------------');
       return;
     }
 
-    await transporter.sendMail({
-      from: `"Foodie Platform" <${process.env.SMTP_USER}>`,
+    const data = await resend.emails.send({
+      from: fromEmail,
       to: email,
       subject: "Verify Your Account - Foodie",
       text: `Your verification code is: ${otp}. It expires in 10 minutes.`,
@@ -86,6 +84,12 @@ async function sendOtpEmail(email, otp) {
         </div>
       `,
     });
+
+    if (data.error) {
+      console.error('Resend API Error:', data.error);
+    } else {
+      console.log("OTP Email sent successfully. ID:", data.data?.id);
+    }
   } catch (error) {
     console.error('Failed to send OTP:', error);
   }
