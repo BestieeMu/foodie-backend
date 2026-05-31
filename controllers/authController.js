@@ -80,7 +80,10 @@ const signup = async (req, res, next) => {
     const otp = generateOtp();
     const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
+    const { v4: uuidv4 } = require('uuid');
+
     const newUser = {
+      id: uuidv4(),
       email,
       password: hashed,
       name,
@@ -95,7 +98,7 @@ const signup = async (req, res, next) => {
 
     if (error) {
       console.error('Signup error:', error);
-      return res.status(500).json({ message: 'Failed to create user' });
+      return res.status(500).json({ message: 'Failed to create user', error: error.message });
     }
 
     // Send OTP
