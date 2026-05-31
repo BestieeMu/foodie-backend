@@ -35,14 +35,16 @@ app.use(helmet());
 app.use(hpp());
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+const corsOriginHandler = (origin, callback) => {
+  const allowed = process.env.CORS_ORIGIN || 'http://10.0.2.2:4003';
+  if (!origin) return callback(null, true);
+  if (origin.startsWith('http://localhost')) return callback(null, true);
+  if (origin === allowed) return callback(null, true);
+  return callback(new Error('Not allowed by CORS'), false);
+};
+
 app.use(cors({
-  origin: (origin, callback) => {
-    const allowed = process.env.CORS_ORIGIN || 'http://10.0.2.2:4003';
-    if (!origin) return callback(null, true);
-    if (origin.startsWith('http://localhost')) return callback(null, true);
-    if (origin === allowed) return callback(null, true);
-    return callback(new Error('Not allowed by CORS'), false);
-  },
+  origin: corsOriginHandler,
   credentials: true,
 }));
 
@@ -56,7 +58,7 @@ const httpServer = http.createServer(app);
 const { Server } = require('socket.io');
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:8081',
+    origin: corsOriginHandler,
     methods: ['GET', 'POST', 'PATCH'],
     credentials: true,
   }

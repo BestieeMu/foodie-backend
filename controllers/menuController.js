@@ -103,7 +103,7 @@ const createMenuItem = async (req, res, next) => {
         restaurant_id: user.restaurant_id,
         name,
         description,
-        price,
+        price: parseFloat(price),
         category,
         image_url: image,
         options,
@@ -129,7 +129,7 @@ const updateMenuItem = async (req, res, next) => {
       .update({
         name,
         description,
-        price,
+        price: price !== undefined ? parseFloat(price) : undefined,
         category,
         image_url: image,
         options,
