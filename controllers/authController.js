@@ -6,7 +6,7 @@ const { sendOtpEmail } = require('../utils/email');
 // Helper to generate 6-digit OTP
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const login = async (req, res) => {
+const login = async (req, res, next) => {
   const { email, password, role } = req.validated.body;
   console.log('POST /auth/login', { email });
 
@@ -49,26 +49,15 @@ const login = async (req, res) => {
 
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
-    const dummyRes = {
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IlJlZnJlc2ggVG9rZW4iLCJpYXQiOjE1MTYyMzkwMjJ9.8XxK4wRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw6d",
-  "user": {
-    "id": 12345,
-    "name": "John Doe",
-    "role": "admin",
-    "email": "john.doe@example.com",
-    "restaurant_id": 42
-  }
-}
+
     res.json({ accessToken, refreshToken, user: { id: user.id, name: user.name, role: user.role, email: user.email, restaurant_id: user.restaurant_id } });
-    // res.json({ accessToken, refreshToken, user: { id: user.id, name: user.name, role: user.role, email: user.email, restaurant_id: user.restaurant_id } });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    next(error);
   }
 };
 
-const signup = async (req, res) => {
+const signup = async (req, res, next) => {
   const { email, password, name, role } = req.validated.body;
   console.log('POST /auth/signup', { email, role });
 
@@ -113,11 +102,11 @@ const signup = async (req, res) => {
     });
   } catch (error) {
     console.error('Signup error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    next(error);
   }
 };
 
-const verifyOtp = async (req, res) => {
+const verifyOtp = async (req, res, next) => {
   const { email, otp } = req.body;
   
   try {
@@ -136,11 +125,11 @@ const verifyOtp = async (req, res) => {
     res.json({ message: 'Verified successfully', accessToken, refreshToken, user: { id: user.id, name: user.name, role: user.role, email: user.email } });
   } catch (error) {
     console.error('OTP verification error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    next(error);
   }
 };
 
-const refreshToken = async (req, res) => {
+const refreshToken = async (req, res, next) => {
   const { refreshToken } = req.body;
   if (!refreshToken) return res.status(400).json({ message: 'Refresh token required' });
 
@@ -153,7 +142,7 @@ const refreshToken = async (req, res) => {
     const newAccessToken = signAccessToken(user);
     res.json({ accessToken: newAccessToken });
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired refresh token' });
+    next(error);
   }
 };
 

@@ -15,9 +15,12 @@ const transporter = nodemailer.createTransport({
  */
 async function sendRestaurantWelcomeEmail(email, name, password) {
   try {
-    // If SMTP is not configured, log to console and return
+    // If SMTP is not configured, throw in production, log in dev
     if (!process.env.SMTP_HOST) {
-      console.log('--- EMAIL MOCK (SMTP NOT CONFIGURED) ---');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('SMTP configuration missing in production');
+      }
+      console.warn('--- EMAIL SKIPPED - SMTP NOT CONFIGURED ---');
       console.log(`To: ${email}`);
       console.log(`Subject: Welcome to Foodie Platform`);
       console.log(`Body: Hello ${name}, your restaurant account has been created. Use password: ${password}`);
@@ -59,7 +62,10 @@ async function sendRestaurantWelcomeEmail(email, name, password) {
 async function sendOtpEmail(email, otp) {
   try {
     if (!process.env.SMTP_HOST) {
-      console.log('--- OTP MOCK (SMTP NOT CONFIGURED) ---');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('SMTP configuration missing in production');
+      }
+      console.warn('--- OTP EMAIL SKIPPED - SMTP NOT CONFIGURED ---');
       console.log(`To: ${email}`);
       console.log(`OTP: ${otp}`);
       console.log('--------------------------------------');

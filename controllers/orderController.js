@@ -2,7 +2,7 @@ const supabase = require('../utils/supabase');
 const { calcItemPrice, calculateOrderCosts } = require('../utils/calculations');
 const { v4: uuidv4 } = require('uuid');
 
-const createOrder = async (req, res) => {
+const createOrder = async (req, res, next) => {
   try {
     const { userId, restaurantId, items, type = 'delivery', schedule, pickupAddress, deliveryAddress, gift = false, giftMessage, recipientName } = req.validated.body;
     
@@ -93,11 +93,11 @@ const createOrder = async (req, res) => {
     res.status(201).json(order);
   } catch (error) {
     console.error('Create Order Error:', error);
-    res.status(500).json({ message: 'Failed to create order', error: error.message });
+    next(error);
   }
 };
 
-const getOrderById = async (req, res) => {
+const getOrderById = async (req, res, next) => {
   try {
     const { orderId } = req.params;
     const { data: order, error } = await supabase
@@ -116,11 +116,11 @@ const getOrderById = async (req, res) => {
     
     res.json(order);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-const getUserOrders = async (req, res) => {
+const getUserOrders = async (req, res, next) => {
   try {
     const { userId } = req.params;
     if (req.user.id !== userId && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
@@ -131,16 +131,17 @@ const getUserOrders = async (req, res) => {
       .from('orders')
       .select('*, restaurant:restaurant_id(name, image_url)')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(20);
 
     if (error) throw error;
     res.json(userOrders || []);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-const updateOrderStatus = async (req, res) => {
+const updateOrderStatus = async (req, res, next) => {
   try {
     const { orderId } = req.params;
     const { status } = req.validated.body;
@@ -271,7 +272,7 @@ const updateOrderStatus = async (req, res) => {
 
     res.json(updated);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 

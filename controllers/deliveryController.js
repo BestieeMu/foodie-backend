@@ -1,6 +1,6 @@
 const supabase = require('../utils/supabase');
 
-const getAvailableOrders = async (req, res) => {
+const getAvailableOrders = async (req, res, next) => {
   try {
     // return only delivery orders that are not assigned yet and pending/confirmed
     const { data: orders, error } = await supabase
@@ -9,16 +9,17 @@ const getAvailableOrders = async (req, res) => {
       .eq('type', 'delivery')
       .is('driver_id', null)
       .in('status', ['pending', 'preparing', 'ready_for_pickup']) 
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(50);
 
     if (error) throw error;
     res.json(orders);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-const acceptOrder = async (req, res) => {
+const acceptOrder = async (req, res, next) => {
   try {
     const { driverId, orderId } = req.validated.body;
     
@@ -56,11 +57,11 @@ const acceptOrder = async (req, res) => {
     
     res.json(updatedOrder);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-const getDriverOrders = async (req, res) => {
+const getDriverOrders = async (req, res, next) => {
   try {
     const { driverId } = req.params;
     if (req.user.id !== driverId && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
@@ -77,13 +78,13 @@ const getDriverOrders = async (req, res) => {
     if (error) throw error;
     res.json(orders);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-const updateDriverLocation = async (req, res) => {
+const updateDriverLocation = async (req, res, next) => {
     try {
-        const { driverId, lat, lng } = req.body;
+        const { driverId, lat, lng } = req.validated.body;
         
         if (req.user.id !== driverId) return res.status(403).json({ message: 'Forbidden' });
 
@@ -113,11 +114,11 @@ const updateDriverLocation = async (req, res) => {
 
         res.json({ message: 'Location updated' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        next(error);
     }
 };
 
-const getDriverLocation = async (req, res) => {
+const getDriverLocation = async (req, res, next) => {
     try {
         const { driverId } = req.params;
         const requester = req.user;
@@ -151,7 +152,7 @@ const getDriverLocation = async (req, res) => {
         if (error || !loc) return res.status(404).json({ message: 'Location not found' });
         res.json(loc);
       } catch (error) {
-        res.status(500).json({ message: error.message });
+        next(error);
       }
 };
 

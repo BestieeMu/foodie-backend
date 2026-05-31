@@ -81,6 +81,11 @@ const addItem = async (req, res) => {
 
     const { data: menuItem } = await supabase.from('menu_items').select('*').eq('id', itemId).single();
     if (!menuItem) return res.status(400).json({ message: 'Invalid item' });
+    
+    // Security/Logic Check: Ensure the item belongs to the restaurant this group is ordering from
+    if (menuItem.restaurant_id !== group.restaurant_id) {
+        return res.status(400).json({ message: 'Items in a group order must all be from the same restaurant' });
+    }
 
     const price = calcItemPrice(menuItem, choice);
     const entry = { userId, itemId: menuItem.id, name: menuItem.name, quantity, price, choice };

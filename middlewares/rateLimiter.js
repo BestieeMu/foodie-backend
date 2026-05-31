@@ -24,8 +24,17 @@ const uploadLimiter = rateLimit({
   message: { message: 'Too many upload attempts, please try again after an hour' }
 });
 
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 OTP verification attempts per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many OTP verification attempts, please try again after 15 minutes' }
+});
+
 module.exports = {
   generalLimiter,
   authLimiter,
-  uploadLimiter
+  uploadLimiter,
+  otpLimiter
 };

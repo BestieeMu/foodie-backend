@@ -1,10 +1,14 @@
 const supabase = require('../utils/supabase');
 
-const getRestaurants = async (req, res) => {
+const getRestaurants = async (req, res, next) => {
   try {
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+
     const { data: restaurants, error } = await supabase
       .from('restaurants')
-      .select('*');
+      .select('*')
+      .range(offset, offset + limit - 1);
       
     if (error) throw error;
 
@@ -19,11 +23,11 @@ const getRestaurants = async (req, res) => {
       }))
     );
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-const getRestaurantItems = async (req, res) => {
+const getRestaurantItems = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { data: rest, error: restError } = await supabase
@@ -50,7 +54,7 @@ const getRestaurantItems = async (req, res) => {
 
     res.json(mappedItems);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 

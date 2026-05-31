@@ -1,7 +1,7 @@
 const { initializePayment, verifyPayment } = require('../utils/paystack');
 const supabase = require('../utils/supabase');
 
-const initPayment = async (req, res) => {
+const initPayment = async (req, res, next) => {
   try {
     const { amount, orderId } = req.body;
     const user = req.user;
@@ -14,11 +14,11 @@ const initPayment = async (req, res) => {
     const data = await initializePayment(user.email, amount, metadata);
     res.json(data);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-const verify = async (req, res) => {
+const verify = async (req, res, next) => {
   try {
     const { reference } = req.params;
     const data = await verifyPayment(reference);
@@ -59,7 +59,7 @@ const verify = async (req, res) => {
 
     res.json({ status: 'failed', message: 'Payment verification failed' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
