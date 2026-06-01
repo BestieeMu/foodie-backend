@@ -6,6 +6,14 @@ function makeInviteCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
+function makeDeliveryVerificationCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function isMissingDeliveryCodeColumnError(error) {
+  return error?.code === 'PGRST204' && String(error?.message || '').includes('delivery_verification_code');
+}
+
 const createGroup = async (req, res) => {
   try {
     const { userId, restaurantId, type = 'delivery', schedule, pickupAddress, deliveryAddress } = req.validated.body;
@@ -15,6 +23,7 @@ const createGroup = async (req, res) => {
     if (!rest) return res.status(400).json({ message: 'Invalid restaurant' });
 
     const group = {
+      id: uuidv4(),
       restaurant_id: restaurantId,
       creator_id: userId,
       type,
@@ -144,13 +153,18 @@ const finalizeGroupOrder = async (req, res) => {
       delivery_fee: costs.deliveryFee,
       delivery_address: group.delivery_address,
       pickup_address: group.pickup_address,
+      delivery_verification_code: group.type === 'delivery' ? makeDeliveryVerificationCode() : null,
       payment_status: 'pending',
       created_at: new Date().toISOString(),
       schedule: group.schedule,
       group_id: group.id
     };
 
-    const { error: orderError } = await supabase.from('orders').insert(order);
+    let { error: orderError } = await supabase.from('orders').insert(order);
+    if (isMissingDeliveryCodeColumnError(orderError)) {
+      delete order.delivery_verification_code;
+      ({ error: orderError } = await supabase.from('orders').insert(order));
+    }
     if (orderError) throw orderError;
 
     const { error: groupError } = await supabase

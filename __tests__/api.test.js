@@ -27,8 +27,32 @@ function createTestApp() {
   return app;
 }
 
+const supabase = require('../utils/supabase');
+const bcrypt = require('bcryptjs');
+
 describe('Foodie API', () => {
   const app = createTestApp();
+
+  beforeAll(async () => {
+    // Delete existing demo user
+    await supabase.from('users').delete().eq('email', 'demo@foodie.com');
+    // Create new verified demo user
+    const hashedPassword = await bcrypt.hash('password123', 10);
+    const { error } = await supabase.from('users').insert({
+      id: 'u_test_demo_customer',
+      email: 'demo@foodie.com',
+      password: hashedPassword,
+      name: 'Demo Customer',
+      role: 'customer',
+      is_verified: true,
+    });
+    if (error) console.error('Error seeding demo user:', error);
+  });
+
+  afterAll(async () => {
+    // Cleanup demo user
+    await supabase.from('users').delete().eq('email', 'demo@foodie.com');
+  });
 
   it('login returns token for demo user', async () => {
     const res = await request(app).post('/api/auth/login').send({

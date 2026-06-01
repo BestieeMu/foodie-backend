@@ -43,10 +43,12 @@ CREATE TABLE IF NOT EXISTS orders (
   restaurant_id TEXT REFERENCES restaurants(id),
   items JSONB NOT NULL, -- Stores array of items with options
   total NUMERIC NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'preparing', 'ready_for_pickup', 'on_the_way', 'delivered', 'cancelled', 'rejected')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'accepted', 'preparing', 'ready_for_pickup', 'arrived_pickup', 'picked_up', 'on_the_way', 'delivered', 'cancelled', 'rejected', 'scheduled')),
   delivery_address JSONB,
   payment_status TEXT DEFAULT 'pending',
   driver_id TEXT REFERENCES users(id),
+  delivery_verification_code TEXT CHECK (delivery_verification_code IS NULL OR delivery_verification_code ~ '^[0-9]{6}$'),
+  delivered_at TIMESTAMP WITH TIME ZONE,
   type TEXT DEFAULT 'delivery', -- 'delivery' or 'pickup'
   group_id TEXT, -- Link to group order
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

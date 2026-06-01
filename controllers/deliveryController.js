@@ -1,5 +1,11 @@
 const supabase = require('../utils/supabase');
 
+function redactDeliveryCode(order) {
+  if (!order) return order;
+  const { delivery_verification_code, ...safeOrder } = order;
+  return safeOrder;
+}
+
 const getAvailableOrders = async (req, res, next) => {
   try {
     // return only delivery orders that are not assigned yet and pending/confirmed
@@ -13,7 +19,7 @@ const getAvailableOrders = async (req, res, next) => {
       .limit(50);
 
     if (error) throw error;
-    res.json(orders);
+    res.json((orders || []).map(redactDeliveryCode));
   } catch (error) {
     next(error);
   }
@@ -55,7 +61,7 @@ const acceptOrder = async (req, res, next) => {
         io.to(`order_${orderId}`).emit('delivery:update', { type: 'accepted', orderId, driverId });
     }
     
-    res.json(updatedOrder);
+    res.json(redactDeliveryCode(updatedOrder));
   } catch (error) {
     next(error);
   }
@@ -76,7 +82,7 @@ const getDriverOrders = async (req, res, next) => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    res.json(orders);
+    res.json((orders || []).map(redactDeliveryCode));
   } catch (error) {
     next(error);
   }
@@ -168,7 +174,7 @@ const pickupOrder = async (req, res, next) => {
 
 const completeOrder = async (req, res, next) => {
   req.validated = {
-    body: { status: 'delivered' },
+    body: { status: 'delivered', deliveryCode: req.body?.deliveryCode },
     params: { orderId: req.params.orderId }
   };
   return orderController.updateOrderStatus(req, res, next);

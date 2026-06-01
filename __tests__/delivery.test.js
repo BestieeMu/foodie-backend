@@ -1,5 +1,8 @@
 const request = require('supertest');
 const app = require('../server');
+const supabase = require('../utils/supabase');
+
+jest.setTimeout(20000);
 
 // We cannot import app from server since server starts listening immediately.
 // Instead, we'll require express and the routers to simulate requests.
@@ -38,6 +41,33 @@ describe('Delivery accept flow', () => {
   let customerAccessToken;
   let customerId;
 
+  beforeAll(async () => {
+    // Ensure test restaurant and item exist
+    await supabase.from('menu_items').delete().eq('restaurant_id', 'r_1');
+    await supabase.from('restaurants').delete().eq('id', 'r_1');
+
+    await supabase.from('restaurants').insert({
+      id: 'r_1',
+      name: 'Test Restaurant 1',
+      rating: 4.5,
+      categories: ['Burgers', 'Fast Food'],
+      address: '123 Main St'
+    });
+
+    await supabase.from('menu_items').insert({
+      id: 'i_1',
+      restaurant_id: 'r_1',
+      name: 'Regular Burger',
+      price: 9.99,
+      is_available: true,
+      options: {
+        sizes: [
+          { id: 'size_regular', name: 'Regular', price: 0 }
+        ]
+      }
+    });
+  });
+
   it('signs up users and logs in', async () => {
     const driverEmail = `driver_${Date.now()}@foodie.com`;
     const customerEmail = `customer_${Date.now()}@foodie.com`;
@@ -47,13 +77,35 @@ describe('Delivery accept flow', () => {
       .post('/api/auth/signup')
       .send({ email: driverEmail, password, name: 'Driver Test', role: 'driver' });
     expect(signupDriverRes.status).toBe(201);
-    driverId = signupDriverRes.body.user.id;
+    
+    const { data: driverUser } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', driverEmail)
+      .single();
+    expect(driverUser).toBeTruthy();
+    driverId = driverUser.id;
+    await supabase
+      .from('users')
+      .update({ is_verified: true, otp_code: null, otp_expires: null })
+      .eq('id', driverId);
 
     const signupCustomerRes = await request(app)
       .post('/api/auth/signup')
       .send({ email: customerEmail, password, name: 'Customer Test', role: 'customer' });
     expect(signupCustomerRes.status).toBe(201);
-    customerId = signupCustomerRes.body.user.id;
+
+    const { data: customerUser } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', customerEmail)
+      .single();
+    expect(customerUser).toBeTruthy();
+    customerId = customerUser.id;
+    await supabase
+      .from('users')
+      .update({ is_verified: true, otp_code: null, otp_expires: null })
+      .eq('id', customerId);
 
     const loginDriverRes = await request(app)
       .post('/api/auth/login')
@@ -96,6 +148,21 @@ describe('Delivery accept flow', () => {
       .send({ driverId, orderId: app.locals.testOrderId });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('accepted');
-    expect(res.body.driverId).toBe(driverId);
+    expect(res.body.driver_id).toBe(driverId);
+  });
+
+  afterAll(async () => {
+    if (driverId) {
+      await supabase.from('users').delete().eq('id', driverId);
+    }
+    if (customerId) {
+      await supabase.from('users').delete().eq('id', customerId);
+    }
+    if (app.locals.testOrderId) {
+      await supabase.from('order_items').delete().eq('order_id', app.locals.testOrderId);
+      await supabase.from('orders').delete().eq('id', app.locals.testOrderId);
+    }
+    await supabase.from('menu_items').delete().eq('restaurant_id', 'r_1');
+    await supabase.from('restaurants').delete().eq('id', 'r_1');
   });
 });

@@ -33,7 +33,10 @@ const createOrderSchema = z.object({
 
 const updateOrderStatusSchema = z.object({
   params: z.object({ orderId: z.string().min(1) }),
-  body: z.object({ status: z.enum(['pending','confirmed','accepted','preparing','ready_for_pickup','arrived_pickup','picked_up','on_the_way','delivered','cancelled','rejected','scheduled']) }),
+  body: z.object({
+    status: z.enum(['pending','confirmed','accepted','preparing','ready_for_pickup','arrived_pickup','picked_up','on_the_way','delivered','cancelled','rejected','scheduled']),
+    deliveryCode: z.string().regex(/^\d{6}$/).optional(),
+  }),
 });
 
 module.exports = { createOrderSchema, updateOrderStatusSchema };

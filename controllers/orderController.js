@@ -2,6 +2,14 @@ const supabase = require('../utils/supabase');
 const { calcItemPrice, calculateOrderCosts } = require('../utils/calculations');
 const { v4: uuidv4 } = require('uuid');
 
+function makeDeliveryVerificationCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function isMissingDeliveryCodeColumnError(error) {
+  return error?.code === 'PGRST204' && String(error?.message || '').includes('delivery_verification_code');
+}
+
 const createOrder = async (req, res, next) => {
   try {
     const { userId, restaurantId, items, type = 'delivery', schedule, pickupAddress, deliveryAddress, gift = false, giftMessage, recipientName } = req.validated.body;
@@ -88,13 +96,18 @@ const createOrder = async (req, res, next) => {
       delivery_fee: costs.deliveryFee,
       delivery_address: type === 'delivery' ? deliveryAddress : undefined,
       pickup_address: pickupAddress, // Might be needed for driver
+      delivery_verification_code: type === 'delivery' ? makeDeliveryVerificationCode() : null,
       payment_status: 'pending',
       created_at: new Date().toISOString(),
       schedule: schedule || null
     };
 
     // 4. Insert into DB
-    const { error } = await supabase.from('orders').insert(order);
+    let { error } = await supabase.from('orders').insert(order);
+    if (isMissingDeliveryCodeColumnError(error)) {
+      delete order.delivery_verification_code;
+      ({ error } = await supabase.from('orders').insert(order));
+    }
     
     if (error) {
       console.error('Order create error:', error);
@@ -164,7 +177,7 @@ const getUserOrders = async (req, res, next) => {
 const updateOrderStatus = async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const { status } = req.validated.body;
+    const { status, deliveryCode } = req.validated.body;
     const user = req.user;
     
     const { data: order, error: fetchError } = await supabase.from('orders').select('*').eq('id', orderId).single();
@@ -195,6 +208,17 @@ const updateOrderStatus = async (req, res, next) => {
         }
     }
 
+    if (status === 'delivered' && order.type === 'delivery' && !isSuperAdmin) {
+        const expectedCode = String(order.delivery_verification_code || '').trim();
+        const suppliedCode = String(deliveryCode || '').trim();
+        if (!expectedCode) {
+            return res.status(400).json({ message: 'Delivery verification code is not available for this order' });
+        }
+        if (!/^\d{6}$/.test(suppliedCode) || suppliedCode !== expectedCode) {
+            return res.status(400).json({ message: 'Invalid delivery verification code' });
+        }
+    }
+
     // Logic to ensure correct transitions
     const validTransitions = {
       'pending': ['accepted', 'preparing', 'rejected', 'cancelled'],
@@ -202,7 +226,8 @@ const updateOrderStatus = async (req, res, next) => {
       'accepted': ['preparing', 'ready_for_pickup', 'cancelled'], // 'cancelled' by admin/system
       'preparing': ['ready_for_pickup', 'cancelled'],
       'ready_for_pickup': ['picked_up', 'cancelled'],
-      'picked_up': ['delivered'],
+      'picked_up': ['on_the_way', 'delivered'],
+      'on_the_way': ['delivered'],
       'delivered': [],
       'rejected': [],
       'cancelled': []
@@ -222,9 +247,17 @@ const updateOrderStatus = async (req, res, next) => {
         });
     }
 
+    const updatePayload = {
+      status,
+      updated_at: new Date().toISOString()
+    };
+    if (status === 'delivered') {
+      updatePayload.delivered_at = new Date().toISOString();
+    }
+
     const { data: updated, error } = await supabase
       .from('orders')
-      .update({ status, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq('id', orderId)
       .select()
       .single();
