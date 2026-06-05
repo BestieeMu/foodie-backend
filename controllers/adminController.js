@@ -190,6 +190,9 @@ const createRestaurant = async (req, res) => {
 
         res.status(201).json({ message: 'Restaurant and Admin created', restaurant: rest });
     } catch (error) {
+        if (error.code === '23505' || error.message?.includes('duplicate key value')) {
+            return res.status(400).json({ message: 'A user with this email already exists.' });
+        }
         res.status(500).json({ message: error.message });
     }
 };
@@ -410,6 +413,9 @@ const createStaff = async (req, res) => {
         if (error) throw error;
         res.json(newStaff);
     } catch (error) {
+        if (error.code === '23505' || error.message?.includes('duplicate key value')) {
+            return res.status(400).json({ message: 'A user with this email already exists.' });
+        }
         res.status(500).json({ message: error.message });
     }
 };
@@ -524,7 +530,21 @@ const getMyReviews = async (req, res) => {
 
         const { data: reviews, error } = await supabase
             .from('reviews')
-            .select('id, rating, comment, created_at, order_id, user:user_id(name)')
+            .select(`
+                id, 
+                rating, 
+                comment, 
+                created_at, 
+                order_id, 
+                driver_rating, 
+                driver_comment, 
+                platform_rating, 
+                platform_comment, 
+                restaurant_response, 
+                restaurant_responded_at,
+                user:user_id(name),
+                driver:driver_id(name)
+            `)
             .eq('restaurant_id', user.restaurant_id)
             .order('created_at', { ascending: false });
 
@@ -536,7 +556,14 @@ const getMyReviews = async (req, res) => {
             customerName: r.user?.name || 'Unknown Customer',
             rating: r.rating,
             comment: r.comment,
-            createdAt: r.created_at
+            createdAt: r.created_at,
+            driverName: r.driver?.name || null,
+            driverRating: r.driver_rating,
+            driverComment: r.driver_comment,
+            platformRating: r.platform_rating,
+            platformComment: r.platform_comment,
+            restaurantResponse: r.restaurant_response,
+            restaurantRespondedAt: r.restaurant_responded_at
         })));
     } catch (error) {
         res.status(500).json({ message: error.message });

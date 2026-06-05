@@ -20,6 +20,9 @@ const financeRouter = require('./routes/finance');
 const uploadRouter = require('./routes/upload');
 const systemRouter = require('./routes/system');
 const paymentRouter = require('./routes/payment');
+const dispatchRouter = require('./routes/dispatch');
+const chatRouter = require('./routes/chat');
+const homeRouter = require('./routes/home');
 
 const { generalLimiter, authLimiter, uploadLimiter } = require('./middlewares/rateLimiter');
 
@@ -97,9 +100,14 @@ io.on('connection', (socket) => {
     console.log(`User ${userId} joined restaurant_${socket.user.restaurant_id}`);
   }
 
+  // Allow manual join if token lacked restaurant_id
+  socket.on('join_restaurant', (restaurantId) => {
+    socket.join(`restaurant_${restaurantId}`);
+    console.log(`User ${userId} manually joined restaurant_${restaurantId}`);
+  });
+
   // Event to join order tracking room
   socket.on('join_order', (orderId) => {
-    // Ideally check if user is allowed to view this order
     socket.join(`order_${orderId}`);
     console.log(`User ${userId} joined order_${orderId}`);
   });
@@ -116,6 +124,68 @@ io.on('connection', (socket) => {
 
   socket.on('leave_group', (groupId) => {
     socket.leave(`group_${groupId}`);
+  });
+
+  // Handle group cart updates
+  socket.on('group_cart_update', (data) => {
+    // Broadcast the updated cart to everyone else in the group room
+    if (data.groupId) {
+      socket.to(`group_${data.groupId}`).emit('group_cart_updated', data);
+    }
+  });
+
+  // Handle driver location updates for live tracking
+  socket.on('driver_location_update', (data) => {
+    if (data.orderId) {
+      // Broadcast location to the order room (customer and admin tracking)
+      socket.to(`order_${data.orderId}`).emit('driver_location_updated', data);
+    }
+  });
+
+  // Handle real-time chat messages
+  socket.on('send_message', (data) => {
+    if (data.orderId) {
+      // Forward the message to the order room
+      socket.to(`order_${data.orderId}`).emit('new_message', data);
+    }
+  });
+
+  // Driver goes online — track availability
+  socket.on('driver_online', async (data) => {
+    const driverId = socket.user.id;
+    console.log(`Driver ${driverId} is now online`);
+    try {
+      const supabase = require('./utils/supabase');
+      await supabase
+        .from('driver_locations')
+        .upsert({
+          driver_id: driverId,
+          lat: data?.lat || 0,
+          lng: data?.lng || 0,
+          is_busy: false,
+          last_heartbeat: new Date().toISOString(),
+        });
+    } catch (e) {
+      console.error('driver_online error:', e);
+    }
+  });
+
+  // Driver goes offline
+  socket.on('driver_offline', async () => {
+    const driverId = socket.user.id;
+    console.log(`Driver ${driverId} is now offline`);
+    try {
+      const supabase = require('./utils/supabase');
+      // Set heartbeat far in the past so dispatch ignores this driver
+      await supabase
+        .from('driver_locations')
+        .update({
+          last_heartbeat: new Date(0).toISOString(),
+        })
+        .eq('driver_id', driverId);
+    } catch (e) {
+      console.error('driver_offline error:', e);
+    }
   });
 
   socket.on('disconnect', () => console.log(`Socket disconnected: ${id}`));
@@ -141,6 +211,9 @@ app.use('/api', systemRouter);
 const walletRouter = require('./routes/wallet');
 app.use('/api', paymentRouter);
 app.use('/api', walletRouter);
+app.use('/api', dispatchRouter);
+app.use('/api', chatRouter);
+app.use('/api/home', homeRouter);
 
 // 404 handler
 app.use((req, res, next) => {

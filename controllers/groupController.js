@@ -14,6 +14,44 @@ function isMissingDeliveryCodeColumnError(error) {
   return error?.code === 'PGRST204' && String(error?.message || '').includes('delivery_verification_code');
 }
 
+/**
+ * Compute per-person cost breakdown for a group
+ */
+function computeGroupBreakdown(items, members) {
+  const perPerson = {};
+  members.forEach(m => { perPerson[m] = { items: [], subtotal: 0 }; });
+
+  (items || []).forEach(item => {
+    const userId = item.userId;
+    if (!perPerson[userId]) perPerson[userId] = { items: [], subtotal: 0 };
+    perPerson[userId].items.push(item);
+    perPerson[userId].subtotal += (item.price || 0) * (item.quantity || 1);
+  });
+
+  return perPerson;
+}
+
+/**
+ * Broadcast full group state to all participants
+ */
+async function broadcastGroupState(io, group) {
+  if (!io) return;
+
+  const breakdown = computeGroupBreakdown(group.items, group.members);
+  const itemTotal = (group.items || []).reduce(
+    (sum, it) => sum + (it.price || 0) * (it.quantity || 1), 0
+  );
+
+  io.to(`group_${group.id}`).emit('group:cart_update', {
+    groupId: group.id,
+    items: group.items || [],
+    members: group.members || [],
+    breakdown,
+    groupTotal: itemTotal,
+    status: group.status,
+  });
+}
+
 const createGroup = async (req, res) => {
   try {
     const { userId, restaurantId, type = 'delivery', schedule, pickupAddress, deliveryAddress } = req.validated.body;
@@ -69,6 +107,14 @@ const joinGroup = async (req, res) => {
         .select()
         .single();
       if (updateError) throw updateError;
+
+      // Broadcast member joined
+      const io = req.app.locals.io;
+      if (io) {
+        io.to(`group_${group.id}`).emit('group:member_joined', { userId, groupId: group.id });
+        await broadcastGroupState(io, updated);
+      }
+
       return res.json(updated);
     }
     
@@ -84,6 +130,7 @@ const addItem = async (req, res) => {
     
     const { data: group, error } = await supabase.from('group_orders').select('*').eq('id', groupId).single();
     if (error || !group) return res.status(404).json({ message: 'Group not found' });
+    if (group.status !== 'open') return res.status(400).json({ message: 'Group is not open for adding items' });
     
     const members = group.members || [];
     if (!members.includes(userId)) return res.status(403).json({ message: 'Not a group member' });
@@ -97,23 +144,148 @@ const addItem = async (req, res) => {
     }
 
     const price = calcItemPrice(menuItem, choice);
-    const entry = { userId, itemId: menuItem.id, name: menuItem.name, quantity, price, choice };
+    const entryId = uuidv4();
+    const entry = { id: entryId, userId, itemId: menuItem.id, name: menuItem.name, quantity, price, choice };
     
     const items = group.items || [];
     items.push(entry);
 
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from('group_orders')
       .update({ items })
-      .eq('id', groupId);
+      .eq('id', groupId)
+      .select()
+      .single();
 
     if (updateError) throw updateError;
 
-    // Notify group
+    // Broadcast full cart state to all group members
     const io = req.app.locals.io;
-    if (io) io.to(`group_${groupId}`).emit('group:update', { type: 'item_added', entry });
+    await broadcastGroupState(io, updated);
 
     res.json({ message: 'Item added', entry });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * Remove an item from group cart (only the item owner or group creator)
+ */
+const removeItem = async (req, res) => {
+  try {
+    const { groupId, userId, itemEntryId } = req.validated.body;
+
+    const { data: group, error } = await supabase.from('group_orders').select('*').eq('id', groupId).single();
+    if (error || !group) return res.status(404).json({ message: 'Group not found' });
+    if (group.status !== 'open') return res.status(400).json({ message: 'Group is not open for modifications' });
+
+    const items = group.items || [];
+    const itemIndex = items.findIndex(it => it.id === itemEntryId);
+    if (itemIndex === -1) return res.status(404).json({ message: 'Item not found in group cart' });
+
+    // Only the item owner or group creator can remove
+    const item = items[itemIndex];
+    if (item.userId !== userId && group.creator_id !== userId) {
+      return res.status(403).json({ message: 'Only item owner or group creator can remove items' });
+    }
+
+    items.splice(itemIndex, 1);
+
+    const { data: updated, error: updateError } = await supabase
+      .from('group_orders')
+      .update({ items })
+      .eq('id', groupId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    const io = req.app.locals.io;
+    await broadcastGroupState(io, updated);
+
+    res.json({ message: 'Item removed' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * Update quantity of a group cart item
+ */
+const updateItemQuantity = async (req, res) => {
+  try {
+    const { groupId, userId, itemEntryId, quantity } = req.validated.body;
+
+    const { data: group, error } = await supabase.from('group_orders').select('*').eq('id', groupId).single();
+    if (error || !group) return res.status(404).json({ message: 'Group not found' });
+    if (group.status !== 'open') return res.status(400).json({ message: 'Group is not open for modifications' });
+
+    const items = group.items || [];
+    const item = items.find(it => it.id === itemEntryId);
+    if (!item) return res.status(404).json({ message: 'Item not found in group cart' });
+
+    if (item.userId !== userId && group.creator_id !== userId) {
+      return res.status(403).json({ message: 'Only item owner or group creator can update' });
+    }
+
+    if (quantity <= 0) {
+      // Remove item if quantity is 0
+      const idx = items.indexOf(item);
+      items.splice(idx, 1);
+    } else {
+      item.quantity = quantity;
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('group_orders')
+      .update({ items })
+      .eq('id', groupId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    const io = req.app.locals.io;
+    await broadcastGroupState(io, updated);
+
+    res.json({ message: 'Item updated' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * Get group details including full cart state and breakdown
+ */
+const getGroupDetails = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+
+    const { data: group, error } = await supabase
+      .from('group_orders')
+      .select('*, restaurant:restaurant_id(name, image_url, address)')
+      .eq('id', groupId)
+      .single();
+
+    if (error || !group) return res.status(404).json({ message: 'Group not found' });
+
+    // Check membership
+    const members = group.members || [];
+    if (!members.includes(req.user.id) && req.user.role !== 'super_admin') {
+      return res.status(403).json({ message: 'Not a group member' });
+    }
+
+    const breakdown = computeGroupBreakdown(group.items, members);
+    const groupTotal = (group.items || []).reduce(
+      (sum, it) => sum + (it.price || 0) * (it.quantity || 1), 0
+    );
+
+    res.json({
+      ...group,
+      breakdown,
+      groupTotal,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -193,5 +365,8 @@ module.exports = {
     createGroup,
     joinGroup,
     addItem,
+    removeItem,
+    updateItemQuantity,
+    getGroupDetails,
     finalizeGroupOrder
 };

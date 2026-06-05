@@ -88,7 +88,7 @@ const getMyMenu = async (req, res, next) => {
 
 const createMenuItem = async (req, res, next) => {
   try {
-    const { name, description, price, category, image, options } = req.body;
+    const { name, description, price, category, image, images, options, modifiers } = req.body;
 
     const { data: user } = await supabase
       .from('users')
@@ -108,7 +108,9 @@ const createMenuItem = async (req, res, next) => {
         price: parseFloat(price),
         category,
         image_url: image,
+        images: images || [],
         options,
+        modifiers: modifiers || [],
         is_available: true
       })
       .select()
@@ -124,7 +126,7 @@ const createMenuItem = async (req, res, next) => {
 const updateMenuItem = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, description, price, category, image, options, isAvailable } = req.body;
+    const { name, description, price, category, image, images, options, modifiers, isAvailable } = req.body;
 
     const { data: item, error } = await supabase
       .from('menu_items')
@@ -134,7 +136,9 @@ const updateMenuItem = async (req, res, next) => {
         price: price !== undefined ? parseFloat(price) : undefined,
         category,
         image_url: image,
+        images: images !== undefined ? images : undefined,
         options,
+        modifiers: modifiers !== undefined ? modifiers : undefined,
         is_available: isAvailable !== undefined ? isAvailable : true
       })
       .eq('id', id)

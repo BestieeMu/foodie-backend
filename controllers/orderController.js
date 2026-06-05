@@ -64,13 +64,29 @@ const createOrder = async (req, res, next) => {
             });
         }
         
+        // Build modifier details for itemized breakdown
+        const modifierDetails = [];
+        if (it.modifiers && Array.isArray(it.modifiers)) {
+          it.modifiers.forEach(mod => {
+            modifierDetails.push({
+              groupId: mod.groupId,
+              groupName: mod.groupName || '',
+              optionId: mod.optionId,
+              optionName: mod.optionName || '',
+              priceDelta: mod.priceDelta || 0,
+            });
+          });
+        }
+
         orderItems.push({ 
             itemId: menuItem.id, 
             name: menuItem.name, 
             quantity, 
             price, 
             choice,
-            choiceNames
+            choiceNames,
+            modifiers: modifierDetails,
+            specialInstructions: it.specialInstructions || null,
         });
     }
 
@@ -162,7 +178,7 @@ const getUserOrders = async (req, res, next) => {
 
     const { data: userOrders, error } = await supabase
       .from('orders')
-      .select('*, restaurant:restaurant_id(name, image_url)')
+      .select('*, restaurant:restaurant_id(name, image_url), driver:driver_id(name, phone)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -177,7 +193,7 @@ const getUserOrders = async (req, res, next) => {
 const updateOrderStatus = async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const { status, deliveryCode } = req.validated.body;
+    const { status, deliveryCode, cancellationReason } = req.validated.body;
     const user = req.user;
     
     const { data: order, error: fetchError } = await supabase.from('orders').select('*').eq('id', orderId).single();
@@ -254,6 +270,30 @@ const updateOrderStatus = async (req, res, next) => {
     if (status === 'delivered') {
       updatePayload.delivered_at = new Date().toISOString();
     }
+    if (status === 'picked_up') {
+      updatePayload.picked_up_at = new Date().toISOString();
+    }
+    if (status === 'cancelled' && cancellationReason) {
+      updatePayload.cancellation_reason = cancellationReason;
+    }
+
+    // Record routing history entry
+    const routingHistory = order.routing_history || [];
+    const historyEntry = {
+      status,
+      previousStatus: order.status,
+      timestamp: new Date().toISOString(),
+      userId: user.id,
+      userRole: user.role,
+    };
+    // Include driver coordinates if provided
+    const { driverLat, driverLng } = req.validated.body;
+    if (driverLat !== undefined && driverLng !== undefined) {
+      historyEntry.lat = driverLat;
+      historyEntry.lng = driverLng;
+    }
+    routingHistory.push(historyEntry);
+    updatePayload.routing_history = routingHistory;
 
     const { data: updated, error } = await supabase
       .from('orders')
@@ -309,7 +349,47 @@ const updateOrderStatus = async (req, res, next) => {
             status: 'paid_out'
           });
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('Earnings processing error:', e);
+      }
+
+      // Clear driver busy flag on delivery completion
+      if (updated.driver_id) {
+        try {
+          await supabase
+            .from('driver_locations')
+            .update({
+              is_busy: false,
+              current_order_id: null,
+              last_heartbeat: new Date().toISOString(),
+            })
+            .eq('driver_id', updated.driver_id);
+        } catch (e) {
+          console.error('Failed to clear driver busy flag:', e);
+        }
+      }
+    }
+
+    // Auto-dispatch: when order becomes ready_for_pickup and no driver assigned
+    if (status === 'ready_for_pickup' && !updated.driver_id) {
+      try {
+        const { dispatchOrder } = require('./dispatchController');
+        // Create a mock req/res for internal dispatch trigger
+        const mockReq = {
+          params: { orderId },
+          user: req.user,
+          app: req.app,
+        };
+        const mockRes = {
+          status: () => mockRes,
+          json: (data) => console.log('Auto-dispatch result:', data),
+        };
+        await dispatchOrder(mockReq, mockRes, (err) => {
+          if (err) console.error('Auto-dispatch error:', err);
+        });
+      } catch (dispatchErr) {
+        console.error('Auto-dispatch failed:', dispatchErr);
+      }
     }
 
     // Real-time update

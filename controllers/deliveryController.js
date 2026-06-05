@@ -40,6 +40,7 @@ const acceptOrder = async (req, res, next) => {
       .update({ 
         status: 'accepted',
         driver_id: driverId,
+        driver_accepted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
       .eq('id', orderId)
@@ -50,6 +51,29 @@ const acceptOrder = async (req, res, next) => {
     if (updateError || !updatedOrder) {
         return res.status(409).json({ message: 'Order already accepted or not found' });
     }
+
+    // Mark driver as busy
+    await supabase
+      .from('driver_locations')
+      .upsert({
+        driver_id: driverId,
+        is_busy: true,
+        current_order_id: orderId,
+        last_heartbeat: new Date().toISOString(),
+      });
+
+    // Record routing history
+    const routingHistory = updatedOrder.routing_history || [];
+    routingHistory.push({
+      event: 'driver_accepted',
+      driverId,
+      timestamp: new Date().toISOString(),
+    });
+
+    await supabase
+      .from('orders')
+      .update({ routing_history: routingHistory })
+      .eq('id', orderId);
 
     const io = req.app.locals.io;
     if (io) {
@@ -94,9 +118,28 @@ const updateDriverLocation = async (req, res, next) => {
         
         if (req.user.id !== driverId) return res.status(403).json({ message: 'Forbidden' });
 
+        // Check if driver has active orders to auto-set busy flag
+        const { data: activeOrders } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('driver_id', driverId)
+            .in('status', ['accepted', 'picked_up', 'on_the_way', 'preparing', 'ready_for_pickup'])
+            .limit(1);
+
+        const isBusy = activeOrders && activeOrders.length > 0;
+        const currentOrderId = isBusy ? activeOrders[0].id : null;
+
         const { error } = await supabase
             .from('driver_locations')
-            .upsert({ driver_id: driverId, lat, lng, updated_at: new Date().toISOString() });
+            .upsert({
+              driver_id: driverId,
+              lat,
+              lng,
+              is_busy: isBusy,
+              current_order_id: currentOrderId,
+              last_heartbeat: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
 
         if (error) throw error;
 
@@ -104,14 +147,14 @@ const updateDriverLocation = async (req, res, next) => {
         const io = req.app.locals.io;
         if (io) {
             // Find active orders for this driver to notify specific customers
-            const { data: activeOrders } = await supabase
+            const { data: allActiveOrders } = await supabase
                 .from('orders')
                 .select('id')
                 .eq('driver_id', driverId)
-                .in('status', ['accepted', 'picked_up', 'preparing', 'ready_for_pickup']);
+                .in('status', ['accepted', 'picked_up', 'preparing', 'ready_for_pickup', 'on_the_way']);
 
-            if (activeOrders && activeOrders.length > 0) {
-                activeOrders.forEach(order => {
+            if (allActiveOrders && allActiveOrders.length > 0) {
+                allActiveOrders.forEach(order => {
                      // Notify the order room (User & Restaurant listening)
                      io.to(`order_${order.id}`).emit('driver:location', { driverId, lat, lng });
                 });
@@ -162,6 +205,41 @@ const getDriverLocation = async (req, res, next) => {
       }
 };
 
+/**
+ * Driver heartbeat — periodic liveness check with location + busy status
+ */
+const updateDriverHeartbeat = async (req, res, next) => {
+  try {
+    const { driverId, lat, lng, isBusy } = req.validated.body;
+
+    if (req.user.id !== driverId) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const updateData = {
+      driver_id: driverId,
+      lat,
+      lng,
+      last_heartbeat: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (typeof isBusy === 'boolean') {
+      updateData.is_busy = isBusy;
+    }
+
+    const { error } = await supabase
+      .from('driver_locations')
+      .upsert(updateData);
+
+    if (error) throw error;
+
+    res.json({ message: 'Heartbeat received' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const orderController = require('./orderController');
 
 const pickupOrder = async (req, res, next) => {
@@ -186,6 +264,8 @@ module.exports = {
     getDriverOrders,
     updateDriverLocation,
     getDriverLocation,
+    updateDriverHeartbeat,
     pickupOrder,
     completeOrder
 };
+

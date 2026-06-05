@@ -1,6 +1,7 @@
 const express = require('express');
 const { authMiddleware, requireRole } = require('../utils/auth');
 const adminController = require('../controllers/adminController');
+const reviewController = require('../controllers/reviewController');
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.delete('/admin/staff/:id', authMiddleware, requireRole('admin'), adminCon
 
 router.get('/admin/customers/my', authMiddleware, requireRole('admin'), adminController.getMyCustomers);
 router.get('/admin/reviews/my', authMiddleware, requireRole('admin'), adminController.getMyReviews);
+router.post('/admin/reviews/:reviewId/respond', authMiddleware, requireRole('admin'), reviewController.respondToReview);
 
 const menuController = require('../controllers/menuController');
 router.get('/admin/menu/my', authMiddleware, requireRole('admin'), menuController.getMyMenu);
@@ -37,5 +39,6 @@ router.patch('/super/restaurants/:id', authMiddleware, requireRole('super_admin'
 router.delete('/super/restaurants/:id', authMiddleware, requireRole('super_admin'), adminController.deleteRestaurant);
 router.get('/super/users', authMiddleware, requireRole('super_admin'), adminController.getAllUsers);
 router.get('/super/orders/all', authMiddleware, requireRole('super_admin'), adminController.getAllOrders);
+router.get('/super/reviews', authMiddleware, requireRole('super_admin'), reviewController.getSystemReviews);
 
 module.exports = router;

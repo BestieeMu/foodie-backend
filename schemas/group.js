@@ -44,9 +44,28 @@ const groupFinalizeSchema = z.object({
   }),
 });
 
+const groupRemoveItemSchema = z.object({
+  body: z.object({
+    groupId: z.string().min(1),
+    userId: z.string().min(1),
+    itemEntryId: z.string().min(1),
+  }),
+});
+
+const groupUpdateItemSchema = z.object({
+  body: z.object({
+    groupId: z.string().min(1),
+    userId: z.string().min(1),
+    itemEntryId: z.string().min(1),
+    quantity: z.number().int().min(0),
+  }),
+});
+
 module.exports = {
   groupCreateSchema,
   groupJoinSchema,
   groupAddItemSchema,
   groupFinalizeSchema,
+  groupRemoveItemSchema,
+  groupUpdateItemSchema,
 };
